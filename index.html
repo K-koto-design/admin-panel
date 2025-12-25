@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -15,7 +15,7 @@
         #messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
         .msg { max-width: 70%; padding: 10px; margin-bottom: 10px; border-radius: 10px; }
         .msg.user { align-self: flex-start; background: #fff; border: 1px solid #ddd; }
-        .msg.admin { align-self: flex-end; background: #007aff; color: #white; color: white; }
+        .msg.admin { align-self: flex-end; background: #007aff; color: white; }
         .input-box { padding: 20px; background: #fff; display: flex; gap: 10px; }
         input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
         button { padding: 10px 20px; background: #007aff; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
@@ -48,13 +48,14 @@
     };
 
     firebase.initializeApp(firebaseConfig);
-    const dbRef = firebase.database().ref('bank_db');
+    const dbRef = firebase.database().ref('clients');
 
-    let fullDb = [];
+    let clientsData = {};
     let selectedUserId = null;
 
+    // Слушаем обновления базы clients
     dbRef.on('value', (snapshot) => {
-        fullDb = snapshot.val() || [];
+        clientsData = snapshot.val() || {};
         renderUserList();
         if (selectedUserId) renderMessages();
     });
@@ -62,23 +63,39 @@
     function renderUserList() {
         const container = document.getElementById('users');
         container.innerHTML = "";
-        fullDb.forEach(user => {
-            const hasChat = user.chat && user.chat.length > 0;
+        
+        // Превращаем объект в массив для отображения
+        Object.keys(clientsData).forEach(key => {
+            const user = clientsData[key];
+            const chatArray = user.chat ? Object.values(user.chat) : [];
+            const lastMsg = chatArray.length > 0 ? chatArray[chatArray.length - 1].text : 'Нет сообщений';
+            
             const div = document.createElement('div');
-            div.className = `user-item ${selectedUserId === user.id ? 'active' : ''}`;
-            div.innerHTML = `<strong>${user.name}</strong><br><small>${hasChat ? user.chat[user.chat.length-1].text : 'Нет сообщений'}</small>`;
-            div.onclick = () => { selectedUserId = user.id; renderMessages(); renderUserList(); };
+            div.className = `user-item ${selectedUserId === key ? 'active' : ''}`;
+            div.innerHTML = `
+                <strong>${user.name || 'Без имени'} ${user.orgType === 'ИП' ? '(ИП)' : ''}</strong><br>
+                <small>${lastMsg}</small>
+            `;
+            div.onclick = () => { 
+                selectedUserId = key; 
+                renderMessages(); 
+                renderUserList(); 
+            };
             container.appendChild(div);
         });
     }
 
     function renderMessages() {
         const container = document.getElementById('messages');
-        const user = fullDb.find(u => u.id === selectedUserId);
+        const user = clientsData[selectedUserId];
+        if (!user) return;
+
         container.innerHTML = `<h4>Чат с ${user.name}</h4>`;
         
         if (user.chat) {
-            user.chat.forEach(m => {
+            // Firebase может возвращать чат как объект или массив
+            const chatArray = Object.values(user.chat);
+            chatArray.forEach(m => {
                 const d = document.createElement('div');
                 d.className = `msg ${m.role}`;
                 d.innerText = m.text;
@@ -89,21 +106,32 @@
     }
 
     function sendReply() {
-        const text = adminMsg.value.trim();
+        const input = document.getElementById('adminMsg');
+        const text = input.value.trim();
         if (!text || !selectedUserId) return;
 
-        const userIndex = fullDb.findIndex(u => u.id === selectedUserId);
-        if (!fullDb[userIndex].chat) fullDb[userIndex].chat = [];
-        
-        fullDb[userIndex].chat.push({
+        // Создаем новое сообщение в ветке чата конкретного клиента
+        const newMessage = {
             role: 'admin',
             text: text,
             time: Date.now()
-        });
+        };
 
-        dbRef.set(fullDb);
-        adminMsg.value = "";
+        // Пушим сообщение в Firebase (автоматически создаст уникальный ID для сообщения)
+        firebase.database().ref(`clients/${selectedUserId}/chat`).push(newMessage)
+            .then(() => {
+                input.value = "";
+            })
+            .catch(err => {
+                console.error("Ошибка отправки:", err);
+                alert("Ошибка при отправке");
+            });
     }
+
+    // Отправка по Enter
+    document.getElementById('adminMsg').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendReply();
+    });
 </script>
 </body>
 </html>
