@@ -1,4 +1,4 @@
-<<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -64,17 +64,24 @@
         const container = document.getElementById('users');
         container.innerHTML = "";
         
-        // Превращаем объект в массив для отображения
+        // Работаем с ключами объекта (ID клиентов)
         Object.keys(clientsData).forEach(key => {
             const user = clientsData[key];
-            const chatArray = user.chat ? Object.values(user.chat) : [];
-            const lastMsg = chatArray.length > 0 ? chatArray[chatArray.length - 1].text : 'Нет сообщений';
+            
+            // Получаем последнее сообщение для превью
+            let lastMsgText = 'Нет сообщений';
+            if (user.chat) {
+                const chatArray = Object.values(user.chat);
+                if (chatArray.length > 0) {
+                    lastMsgText = chatArray[chatArray.length - 1].text;
+                }
+            }
             
             const div = document.createElement('div');
             div.className = `user-item ${selectedUserId === key ? 'active' : ''}`;
             div.innerHTML = `
-                <strong>${user.name || 'Без имени'} ${user.orgType === 'ИП' ? '(ИП)' : ''}</strong><br>
-                <small>${lastMsg}</small>
+                <strong>${user.name || 'Без имени'} ${user.orgType === 'ИП' ? '<span style="font-size:10px; background:#000; color:#fff; padding:1px 4px; border-radius:3px;">ИП</span>' : ''}</strong><br>
+                <small style="color: #666;">${lastMsgText.substring(0, 30)}${lastMsgText.length > 30 ? '...' : ''}</small>
             `;
             div.onclick = () => { 
                 selectedUserId = key; 
@@ -88,16 +95,21 @@
     function renderMessages() {
         const container = document.getElementById('messages');
         const user = clientsData[selectedUserId];
-        if (!user) return;
+        
+        if (!user) {
+            container.innerHTML = "Выберите чат слева";
+            return;
+        }
 
-        container.innerHTML = `<h4>Чат с ${user.name}</h4>`;
+        container.innerHTML = `<h4 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">Чат с ${user.name}</h4>`;
         
         if (user.chat) {
-            // Firebase может возвращать чат как объект или массив
+            // Превращаем объект сообщений в массив и сортируем по времени (если есть поле time)
             const chatArray = Object.values(user.chat);
             chatArray.forEach(m => {
                 const d = document.createElement('div');
-                d.className = `msg ${m.role}`;
+                // Если роль 'user' или 'client' — прижимаем влево, если 'admin' — вправо
+                d.className = `msg ${m.role === 'admin' ? 'admin' : 'user'}`;
                 d.innerText = m.text;
                 container.appendChild(d);
             });
@@ -108,27 +120,27 @@
     function sendReply() {
         const input = document.getElementById('adminMsg');
         const text = input.value.trim();
+        
         if (!text || !selectedUserId) return;
 
-        // Создаем новое сообщение в ветке чата конкретного клиента
         const newMessage = {
             role: 'admin',
             text: text,
-            time: Date.now()
+            time: firebase.database.ServerValue.TIMESTAMP
         };
 
-        // Пушим сообщение в Firebase (автоматически создаст уникальный ID для сообщения)
+        // Сохраняем сообщение именно в ветку выбранного клиента
         firebase.database().ref(`clients/${selectedUserId}/chat`).push(newMessage)
             .then(() => {
                 input.value = "";
             })
             .catch(err => {
-                console.error("Ошибка отправки:", err);
-                alert("Ошибка при отправке");
+                console.error("Ошибка:", err);
+                alert("Не удалось отправить сообщение");
             });
     }
 
-    // Отправка по Enter
+    // Слушатель клавиши Enter
     document.getElementById('adminMsg').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendReply();
     });
