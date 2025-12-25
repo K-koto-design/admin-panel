@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Панель Поддержки</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <style>
+        body { font-family: sans-serif; display: flex; height: 100vh; margin: 0; background: #f0f2f5; }
+        #user-list { width: 300px; border-right: 1px solid #ccc; background: #fff; overflow-y: auto; }
+        #chat-area { flex: 1; display: flex; flex-direction: column; }
+        .user-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; transition: 0.2s; }
+        .user-item:hover { background: #f9f9f9; }
+        .user-item.active { background: #e7f3ff; border-left: 4px solid #007aff; }
+        #messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
+        .msg { max-width: 70%; padding: 10px; margin-bottom: 10px; border-radius: 10px; }
+        .msg.user { align-self: flex-start; background: #fff; border: 1px solid #ddd; }
+        .msg.admin { align-self: flex-end; background: #007aff; color: #white; color: white; }
+        .input-box { padding: 20px; background: #fff; display: flex; gap: 10px; }
+        input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        button { padding: 10px 20px; background: #007aff; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="user-list">
+    <h3 style="padding: 15px;">Диалоги</h3>
+    <div id="users"></div>
+</div>
+
+<div id="chat-area">
+    <div id="messages">Выберите чат слева</div>
+    <div class="input-box">
+        <input type="text" id="adminMsg" placeholder="Введите ответ...">
+        <button onclick="sendReply()">Отправить</button>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyA3J7KnUgxUHZigwRKmndm7xyxJeeLCrxg",
+        authDomain: "webapp-b7149.firebaseapp.com",
+        databaseURL: "https://webapp-b7149-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "webapp-b7149",
+        storageBucket: "webapp-b7149.firebasestorage.app",
+        messagingSenderId: "1034835242406",
+        appId: "1:1034835242406:web:98499dc1edbb83e4b8f367"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const dbRef = firebase.database().ref('bank_db');
+
+    let fullDb = [];
+    let selectedUserId = null;
+
+    dbRef.on('value', (snapshot) => {
+        fullDb = snapshot.val() || [];
+        renderUserList();
+        if (selectedUserId) renderMessages();
+    });
+
+    function renderUserList() {
+        const container = document.getElementById('users');
+        container.innerHTML = "";
+        fullDb.forEach(user => {
+            const hasChat = user.chat && user.chat.length > 0;
+            const div = document.createElement('div');
+            div.className = `user-item ${selectedUserId === user.id ? 'active' : ''}`;
+            div.innerHTML = `<strong>${user.name}</strong><br><small>${hasChat ? user.chat[user.chat.length-1].text : 'Нет сообщений'}</small>`;
+            div.onclick = () => { selectedUserId = user.id; renderMessages(); renderUserList(); };
+            container.appendChild(div);
+        });
+    }
+
+    function renderMessages() {
+        const container = document.getElementById('messages');
+        const user = fullDb.find(u => u.id === selectedUserId);
+        container.innerHTML = `<h4>Чат с ${user.name}</h4>`;
+        
+        if (user.chat) {
+            user.chat.forEach(m => {
+                const d = document.createElement('div');
+                d.className = `msg ${m.role}`;
+                d.innerText = m.text;
+                container.appendChild(d);
+            });
+        }
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function sendReply() {
+        const text = adminMsg.value.trim();
+        if (!text || !selectedUserId) return;
+
+        const userIndex = fullDb.findIndex(u => u.id === selectedUserId);
+        if (!fullDb[userIndex].chat) fullDb[userIndex].chat = [];
+        
+        fullDb[userIndex].chat.push({
+            role: 'admin',
+            text: text,
+            time: Date.now()
+        });
+
+        dbRef.set(fullDb);
+        adminMsg.value = "";
+    }
+</script>
+</body>
+</html>
